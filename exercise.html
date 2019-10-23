@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Tray.io Jose Vargas Exercise</title>
+    <meta name="description" content="Tray.io Jose Vargas Exercise">
+    <style>
+        #my_file {
+            display: none;
+        }
+
+        input[type=button] {
+            background: #f9f9f9;
+            border: 5px solid #171B30;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px;
+            cursor: pointer;
+        }
+
+        .informationDiv {
+            font-family: Helvetica, Times, Serif;
+            font-size: 15px;
+            font-weight: bold;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            white-space: pre;
+        }
+
+    </style>
+</head>
+
+<body>
+    <input type="button" id="get_file" value="Grab file">
+    <input type="file" id="my_file">
+    <div id="matrix"></div>
+    <div id="information" class="informationDiv"></div>
+    <input type="button" id="clean" value="Get a-Cleanin'" style="visibility: hidden;">
+    <input type="button" id="refresh" value="Refresh" style="visibility: hidden;">
+
+
+    <script>
+        //Dimensions of the matrix
+        var xDimensions = 0;
+        var yDimensions = 0;
+
+        //Coordinates of the initial hoover position
+        var xHoover = 0;
+        var yHoover = 0;
+
+        //The matrix containing the field
+        var matrix = [];
+
+        //The list of dust squares
+        var dust = [];
+
+        //Keeping track of dustParticles cleaned
+
+        var dustTotal = 0;
+
+        //The total set of dust particles
+        var initialDusts = 0;
+
+        //The directions that the hoover will follow
+        var directions = "";
+
+        // Check for the various File API support.
+        if (window.File && window.FileReader && window.FileList && window.Blob) {
+            // Great success! All the File APIs are supported.
+        } else {
+            alert('The File APIs are not fully supported in this browser.');
+        }
+
+        document.getElementById('get_file').onclick = function() {
+            document.getElementById('my_file').click();
+        };
+
+        document.getElementById('clean').onclick = function() {
+            hoover();
+            this.style.visibility = "hidden";
+            this.parentNode.removeChild(this);
+            //renderMatrix(true);
+        };
+
+        document.getElementById('refresh').onclick = function() {
+            window.location.reload();
+            //renderMatrix(true);
+        };
+
+        document.getElementById('my_file').addEventListener('change', handleFileSelect, true);
+
+        function handleFileSelect(evt) {
+            var files = evt.target.files; // FileList object
+
+            // files is a FileList of File objects. List some properties.
+            var output = [];
+            var f = files[0];
+            
+            if(f.name.split(".").pop() !== "txt"){
+                alert("File extension is incorrect. Please choose a text file");
+                return;
+            }
+
+            //Read the file
+            var reader = new FileReader();
+
+            // Closure to capture the file information.
+            reader.onload = (function(theFile) {
+                return function(e) {
+                    // Render file code.
+
+                    var lines = this.result.split('\n');
+                    for (var line = 0; line < lines.length; line++) {
+                        //The first line contains the dimensions
+                        console.log("L: " + lines[line]);
+                        if (line === 0) {
+                            //Needs error handling
+                            var dimensions = lines[line].split(" ");
+
+                            //If the first row is not two numbers in dimensions, throw an error
+                            var regex = /\d+ \d+/g;
+                            if (!lines[line].match(regex)) {
+                                alert('Dimensions are incorrect. Check again');
+                                window.location.reload();
+                                return;
+                            }
+
+                            xDimensions = dimensions[0];
+                            yDimensions = dimensions[1];
+
+                            buildMatrix(xDimensions, yDimensions);
+
+                        } else if (line === 1) {
+                            //The initial hoover position
+                            var position = lines[line].split(" ");
+
+                            var regex = /\d+ \d+/g;
+                            if (!lines[line].match(regex)) {
+                                alert('Initial hoover position is incorrect. Check again');
+                                window.location.reload();
+                                return;
+                            }
+
+                            xHoover = position[0];
+                            yHoover = position[1];
+
+                            //Check that the initial hoover position is valid
+                            if (xHoover > xDimensions - 1 || yHoover > yDimensions - 1) {
+                                alert('the initial hoover position is out of bounds. please double check your file');
+                                window.location.reload();
+                                return;
+                            }
+
+                        } else if (line > 1 && line !== lines.length - 1) {
+
+                            var regex = /\d+ \d+/g;
+                            if (!lines[line].match(regex)) {
+                                alert('Dust coordinates are incorrect. Check again');
+                                window.location.reload();
+                                return;
+                            }
+
+                            //Adding dust into the matrix
+                            var dustCoord = lines[line].split(" ");
+
+
+                            //Check that the dust coordinates are valid
+                            if (dustCoord[0] > xDimensions - 1 || dustCoord[1] > yDimensions - 1) {
+                                alert('a dust particle is situated in an out of bounds position. please double check your file');
+                                window.location.reload();
+                                return;
+                            }
+
+                            addDust(dustCoord[0], dustCoord[1]);
+                        } else if (line === lines.length - 1) {
+
+                            var regex = /[aA|bB|cC|dD|fF|gG|hH|iI|jJ|kK|lL|mM|oO|pP|qQ|rR|tT|uU|vV|xX|yY|zZ|0-9]/g;
+                            if (lines[line].match(regex)) {
+                                alert('The set if directions is not well formed. Please try again');
+                                window.location.reload();
+                                return;
+                            }
+                            directions = lines[line];
+
+                        }
+
+                    }
+                    renderMatrix(false);
+                    markSpot("Begin!", xHoover, yHoover, "·");
+                    var getFileBtn = document.querySelector("#get_file");
+                    getFileBtn.parentNode.removeChild(getFileBtn);
+
+                    var text = "\r\bThere are " + initialDusts + " dust particles to begin with. NOTE! Any dust particle's grid coordinates listed more than once only get counted once\r\nThe initial position of the hoover is [" + xHoover + ", " + yHoover + "]";
+                    
+                    renderInformationalText(text);
+
+                    document.getElementById('clean').style.visibility = "visible";
+                    document.getElementById('refresh').style.visibility = "visible";
+
+                };
+            })(f);
+
+            reader.readAsText(f);
+
+        }
+
+        //Check if the line has two INVALID coordinates ~ careful, it's not valid, it's INVALID
+        function invalidCoordinates(x, y) {
+            return x === null && !Number.isInteger(parseInt(x)) && dimensions[1] === null || !Number.isInteger(parseInt(y))
+        }
+
+        //Render the matrix visually. The rerender parameter is ignored
+        function renderMatrix(rerender) {
+            var visualMatrix = document.getElementById('matrix');
+
+            //If re rendering remove the previous instance of the matrix
+            //if( rerender )
+            //visualMatrix.removeChild (document.getElementById("table"));
+
+            var tbl = document.createElement("table");
+            tbl.id = "table";
+            var tblBody = document.createElement("tbody");
+
+            for (var i = 0; i < yDimensions; i++) {
+                var row = tbl.insertRow();
+                for (var j = 0; j < xDimensions; j++) {
+                    var cell = document.createElement("td");
+                    cell.id = "cell" + j + "" + i;
+                    cell.style.height = "75px";
+                    cell.style.width = "75px";
+                    cell.style.borderStyle = "solid";
+                    cell.style.textAlign = "center";
+                    cell.style.fontSize = "17px";
+                    cell.style.fontStyle = "italic";
+                    cell.style.fontFamily = "Helvetica, Times, Serif"
+                    cell.style.whiteSpace = "pre";
+                    cell.style.borderColor = "#171B30";
+                    if (matrix[j][i].isDust) {
+                        cell.style.backgroundColor = "#946199";
+                    }
+                    row.appendChild(cell);
+                }
+                //tblBody.appendChild(row);
+                tblBody.prepend(row);
+            }
+            tbl.appendChild(tblBody);
+
+            visualMatrix.appendChild(tbl);
+        }
+
+        //Initial build of the room matrix
+        function buildMatrix(x, y) {
+            for (var i = 0; i < x; i++) {
+                matrix[i] = [];
+                for (var j = 0; j < y; j++) {
+                    matrix[i][j] = {};
+                    matrix[i][j].isDust = false;
+                }
+            }
+        }
+
+        //Adds dust into the matrix
+        function addDust(x, y) {
+
+            //If a dust particle's coordinates are listed more than once, it is only counted once
+            if (!matrix[x][y].isDust) {
+                matrix[x][y].isDust = true;
+                initialDusts++;
+            }
+        }
+
+        //Execute commands as referenced in the directions
+        function hoover() {
+
+            //Print out initial stage of the dust
+            console.log("Initial dusting stage:\n");
+            console.log(matrix);
+            console.log("\n");
+
+            var x, y;
+            x = xHoover;
+            y = yHoover;
+
+            //Is there dust in the initial spot?
+            dustOff(x, y);
+
+            for (var i = 0; i < directions.length; i++) {
+                var currentChar = directions.charAt(i);
+                switch (currentChar) {
+                    case "N":
+                        if (y < yDimensions - 1) y++;
+                        markSpot(i + 2, x, y, "↑");
+                        break;
+                    case "S":
+                        if (y > 0) y--;
+                        markSpot(i + 2, x, y, "↓");
+                        break;
+                    case "E":
+                        if (x < xDimensions - 1) x++;
+                        markSpot(i + 2, x, y, "→");
+                        break;
+                    case "W":
+                        if (x > 0) x--;
+                        markSpot(i + 2, x, y, "←");
+                        break;
+
+                }
+                dustOff(x, y);
+            }
+
+            console.log("Done\n");
+
+            console.log("Final stage of the matrix:\n");
+            console.log(matrix);
+
+             //The response text
+            var response = "";
+
+            response += "\r\n\r\nFinal position of the hoover: [" + x + ", " + y + "]\r\n";
+            response += "Total Dust removed: " + dustTotal + "\r\n\r\n";           
+            
+            renderInformationalText(response);
+        }
+
+        //Print out informational text at the bottom of the matrix
+        function renderInformationalText(response) {
+            document.getElementById("information").textContent = response;
+
+        }
+
+        //Remove a dust particle
+        function dustOff(x, y) {
+            //If it's dust, clean it, and then count it.
+            if (matrix[x][y].isDust) {
+                matrix[x][y].isDust = false;
+                var theCell = document.getElementById("cell" + x + "" + y);
+                theCell.style.backgroundColor = "#ffffff";
+                dustTotal++;
+            }
+        }
+
+        //Mark a cell in the room as having been hoovered over. i is the step number/step text, direction is a character representing the direction
+        function markSpot(i, x, y, direction) {
+            var theCell = document.getElementById("cell" + x + "" + y);
+            theCell.textContent = theCell.textContent + i + " (" + direction + ")\r\n";
+            theCell.style.borderWidth = "5px";
+            theCell.style.borderColor = "#ff0000";
+        }
+
+    </script>
+
+</body>
+
+</html>
